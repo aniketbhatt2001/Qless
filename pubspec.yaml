@@ -1,0 +1,50 @@
+name: canteen_mangement
+description: "Order food from your canteen, fast."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.7.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  google_fonts: ^6.3.2
+  get: ^4.6.6
+  dio: ^5.4.1
+  flutter_alice: ^2.0.1
+  shared_preferences: ^2.2.2
+  json_annotation: ^4.9.0
+  lucide_icons: ^0.257.0
+  overlay_support: ^2.1.0
+  animated_bottom_navigation_bar: ^1.4.0
+  shimmer: ^3.0.0
+  shimmer_animation: ^2.2.2+1
+  socket_io_client: ^3.1.4
+  flutter_animate: ^4.5.2
+  mobile_scanner: ^7.2.0
+  carousel_slider: ^5.1.2
+  # Security: Store sensitive data securely (tokens, passwords)
+  flutter_secure_storage: ^9.0.0
+  # Logging: Proper logging instead of print statements
+  logger: ^2.0.2+1
+
+  
+  
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  build_runner: ^2.4.6
+  json_serializable: ^6.7.1
+  # Testing: Mock dependencies for unit tests
+  mockito: ^5.4.4
+  # Testing: BLoC/Cubit testing utilities (if needed in future)
+  # bloc_test: ^9.1.5
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/

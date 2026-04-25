@@ -1,0 +1,1375 @@
+import 'package:carousel_slider/carousel_slider.dart';
+import 'package:flutter/material.dart' hide MenuController;
+import 'package:get/get.dart';
+import 'package:canteen_mangement/features/auth/presentation/controllers/auth_controller.dart';
+import 'package:canteen_mangement/features/menu/presentation/controllers/menu_controller.dart';
+import 'package:canteen_mangement/features/cart/presentation/controllers/cart_controller.dart';
+import 'package:canteen_mangement/core/utils/responsive.dart';
+import 'package:canteen_mangement/features/home/presentation/views/widgets/menu_item_card.dart';
+import 'package:canteen_mangement/features/home/presentation/views/home_skeleton.dart';
+import 'package:canteen_mangement/features/home/presentation/views/category_products_view.dart';
+import 'package:canteen_mangement/features/home/presentation/views/search_meals_view.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+import 'dart:ui';
+import 'dart:math' as math;
+import 'package:canteen_mangement/core/widgets/bouncing_widget.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+
+class HomeView extends StatefulWidget {
+  final ScrollController scrollClr;
+  const HomeView(this.scrollClr, {super.key});
+
+  @override
+  State<HomeView> createState() => _HomeViewState();
+}
+
+class _HomeViewState extends State<HomeView>
+    with SingleTickerProviderStateMixin {
+  final MenuController _menuController =
+      Get.find<MenuController>();
+  final AuthController authController = Get.find<AuthController>();
+  final CartController _cartController = Get.find<CartController>();
+
+  late AnimationController _waveController;
+  late Animation<double> _waveAnimation;
+
+  String? _selectedCategory; // null = All
+
+  @override
+  void initState() {
+    super.initState();
+    _waveController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..repeat(reverse: true);
+    _waveAnimation = Tween<double>(begin: -0.3, end: 0.4).animate(
+      CurvedAnimation(parent: _waveController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _waveController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      if (_menuController.isLoading.value &&
+          _menuController.menuItems.isEmpty) {
+        return const HomeSkeleton();
+      }
+      final items = _menuController.menuItems;
+      return Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        body: Builder(
+          builder: (context) {
+            return RefreshIndicator(
+              triggerMode: RefreshIndicatorTriggerMode.onEdge,
+              onRefresh: () => _menuController.fetchMenuItems(),
+              child: Obx(() {
+                final cart = _cartController.cart.value;
+                final hasItems = cart != null && cart.items.isNotEmpty;
+                final filtered =
+                    _selectedCategory == null
+                        ? items
+                        : items
+                            .where(
+                              (i) =>
+                                  i.category?.toLowerCase() ==
+                                  _selectedCategory!.toLowerCase(),
+                            )
+                            .toList();
+
+                if (Responsive.isDesktop(context)) {
+                  return _buildDesktopLayout(context, filtered, hasItems);
+                }
+                return _buildMobileScrollView(context, filtered, hasItems);
+              }),
+            );
+          },
+        ),
+      );
+    });
+  }
+
+  // ─── DESKTOP LAYOUT ───────────────────────────────────────────
+  Widget _buildDesktopLayout(
+    BuildContext context,
+    List filtered,
+    bool hasItems,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Left column: categories + promo banners
+        SizedBox(
+          width: 280,
+          child: Container(
+            color: const Color(0xFFF8FAFC),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 16),
+                  _buildGreetingHeader(context),
+                  const SizedBox(height: 20),
+                  _buildCategoriesSection(context),
+                  const SizedBox(height: 20),
+                  // Vertical promo list
+                  const Text(
+                    'Explore',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0EA5E9),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ...[
+                    'Main',
+                    'Snack',
+                    'Drink',
+                    'Beverage',
+                    'Dessert',
+                  ].map((cat) => _buildDesktopPromoTile(context, cat)),
+                ],
+              ),
+            ),
+          ),
+        ),
+        // Right column: search + menu grid
+        Expanded(
+          child: CustomScrollView(
+            controller: widget.scrollClr,
+            slivers: [
+              SliverAppBar(
+                pinned: true,
+                toolbarHeight: 10,
+                flexibleSpace: Container(color: Colors.white),
+              ),
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: SearchBarDelegate(),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 8)),
+              SliverToBoxAdapter(child: _buildCategoryFilterChips()),
+              const SliverToBoxAdapter(child: SizedBox(height: 8)),
+              SliverToBoxAdapter(child: _PopularMealsDivider()),
+              const SliverToBoxAdapter(child: SizedBox(height: 8)),
+              if (filtered.isEmpty)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: Text(
+                        'No items available',
+                        style: TextStyle(color: Color(0xFF94A3B8)),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: SliverLayoutBuilder(
+                    builder:
+                        (context, constraints) => Builder(
+                          builder: (context) {
+                            final width = constraints.crossAxisExtent;
+
+                            int crossAxisCount;
+                            double aspectRatio;
+
+                            if (width >= 1400) {
+                              crossAxisCount = 5;
+                              aspectRatio = 1.4;
+                            } else if (width >= 1100) {
+                              crossAxisCount = 4;
+                              aspectRatio = 1.3;
+                            } else if (width >= 800) {
+                              crossAxisCount = 3;
+                              aspectRatio = 1.2;
+                            } else if (width >= 500) {
+                              crossAxisCount = 2;
+                              aspectRatio = 1.1;
+                            } else {
+                              crossAxisCount = 1;
+                              aspectRatio = 1.0;
+                            }
+                            return SliverGrid(
+                              gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: crossAxisCount,
+                                    mainAxisSpacing: 12,
+                                    crossAxisSpacing: 12,
+                                    childAspectRatio: aspectRatio,
+                                  ),
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) => MenuItemCard(
+                                  item: filtered[index],
+                                  index: index,
+                                ),
+                                childCount: filtered.length,
+                              ),
+                            );
+                          },
+                        ),
+                  ),
+                ),
+
+              const SliverToBoxAdapter(child: SizedBox(height: 40)),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopPromoTile(BuildContext context, String category) {
+    final colors = {
+      'Main': const Color(0xFFE11D8F),
+      'Snack': const Color(0xFFF97316),
+      'Drink': const Color(0xFF6366F1),
+      'Beverage': const Color(0xFF0EA5E9),
+      'Dessert': const Color(0xFFD97706),
+    };
+    final color = colors[category] ?? const Color(0xFF0EA5E9);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        onTap:
+            () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => CategoryProductsView(category: category),
+              ),
+            ),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.2)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.restaurant_menu_rounded, color: color, size: 18),
+              const SizedBox(width: 10),
+              Text(
+                category,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: color,
+                ),
+              ),
+              const Spacer(),
+              Icon(Icons.chevron_right_rounded, color: color, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGreetingHeader(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              "Welcome back ",
+              style: TextStyle(
+                color: Colors.grey.shade500,
+                fontSize: 13,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+            AnimatedBuilder(
+              animation: _waveAnimation,
+              builder:
+                  (context, child) => Transform.rotate(
+                    angle: _waveAnimation.value,
+                    alignment: Alignment.bottomCenter,
+                    child: child,
+                  ),
+              child: const Text("👋", style: TextStyle(fontSize: 13)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          authController.user.value?.name ?? "",
+          style: const TextStyle(
+            color: Color(0xFF1E293B),
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            letterSpacing: -0.5,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─── MOBILE SCROLL VIEW ───────────────────────────────────────
+  Widget _buildMobileScrollView(
+    BuildContext context,
+    List filtered,
+    bool hasItems,
+  ) {
+    return CustomScrollView(
+      controller: widget.scrollClr,
+      slivers: [
+        SliverAppBar(
+          pinned: true,
+          toolbarHeight: 10,
+          flexibleSpace: Container(color: Colors.white),
+        ),
+
+        /// GREETING HEADER
+        SliverToBoxAdapter(
+          child: Container(
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(20, 4, 16, 0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            "Welcome back ",
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                          AnimatedBuilder(
+                            animation: _waveAnimation,
+                            builder: (context, child) {
+                              return Transform.rotate(
+                                angle: _waveAnimation.value,
+                                alignment: Alignment.bottomCenter,
+                                child: child,
+                              );
+                            },
+                            child: const Text(
+                              "👋",
+                              style: TextStyle(fontSize: 14),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        authController.user.value?.name ?? "",
+                        style: const TextStyle(
+                          color: Color(0xFF1E293B),
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ).animate().fade().slideX(begin: -0.2),
+              ],
+            ),
+          ),
+        ),
+
+        /// PINNED SEARCH BAR
+        SliverPersistentHeader(pinned: true, delegate: SearchBarDelegate()),
+        const SliverToBoxAdapter(child: SizedBox(height: 2)),
+
+        /// Promo Banners Carousel
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: 200,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 12.0),
+              child: CarouselSlider(
+                options: CarouselOptions(
+                  height: 200,
+                  viewportFraction: 0.82,
+                  enableInfiniteScroll: true,
+                  enlargeCenterPage: true,
+                  enlargeFactor: 0.08,
+                  autoPlay: true,
+                  autoPlayInterval: const Duration(seconds: 4),
+                  autoPlayAnimationDuration: const Duration(milliseconds: 500),
+                  autoPlayCurve: Curves.easeInOut,
+                  scrollPhysics: const BouncingScrollPhysics(),
+                ),
+                items:
+                    [
+                          {
+                            'widget': const PromoBanner(
+                              bgColor: Color(0xFF0C0804),
+                              shadowColor: Color(0xFF8B1A00),
+                              accentColor: Color(0xFFE05C00),
+                              headlineColor: Color(0xFFFFB347),
+                              imageUrl:
+                                  "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&q=95&fit=crop",
+                              chipLabel: "MAIN COURSE",
+                              headLine1: "Crafted",
+                              headLine2: "To Perfection",
+                              tagline: "Full meals that satisfy every craving",
+                              ctaLabel: "Explore Mains",
+                            ),
+                            'category': 'Main',
+                          },
+                          {
+                            'widget': const PromoBanner(
+                              bgColor: Color(0xFF0E0E06),
+                              shadowColor: Color(0xFF7A6B00),
+                              accentColor: Color(0xFFD4E200),
+                              headlineColor: Color(0xFFE8F500),
+                              imageUrl:
+                                  "https://images.unsplash.com/photo-1621939514649-280e2ee25f60?w=800&q=95&fit=crop",
+                              chipLabel: "SNACKS",
+                              headLine1: "Bite-Sized",
+                              headLine2: "Brilliance",
+                              tagline: "Quick bites packed with bold flavor",
+                              ctaLabel: "Grab a Snack",
+                              ctaTextColor: Color(0xFF1A1A00),
+                              painter: _StripePainter(color: Color(0xFFD4E200)),
+                            ),
+                            'category': 'Snack',
+                          },
+                          {
+                            'widget': PromoBanner(
+                              bgColor: const Color(0xFF040E12),
+                              shadowColor: const Color(0xFF006080),
+                              accentColor: const Color(0xFF00CFFF),
+                              headlineColor: const Color(0xFF5DE8FF),
+                              imageUrl:
+                                  "https://images.unsplash.com/photo-1544145945-f90425340c7e?w=800&q=95&fit=crop",
+                              chipLabel: "DRINKS",
+                              headLine1: "Icy Cold,",
+                              headLine2: "Pure Bliss",
+                              tagline: "Chilled drinks to cool your day",
+                              ctaLabel: "Browse Drinks",
+                              ctaTextColor: const Color(0xFF001A22),
+                              painter: _IcePainter(),
+                            ),
+                            'category': 'Drink',
+                          },
+                          {
+                            'widget': PromoBanner(
+                              bgColor: const Color(0xFF0A0510),
+                              shadowColor: const Color(0xFF3D0066),
+                              accentColor: const Color(0xFFBB66FF),
+                              headlineColor: const Color(0xFFCF8FFF),
+                              imageUrl:
+                                  "https://images.unsplash.com/photo-1559181567-c3190ca9d177?w=800&q=95&fit=crop",
+                              chipLabel: "BEVERAGES",
+                              headLine1: "Sip the",
+                              headLine2: "Good Life",
+                              tagline: "Hot, cold & everything in between",
+                              ctaLabel: "See Beverages",
+                              painter: _ArcDotPainter(),
+                            ),
+                            'category': 'Beverage',
+                          },
+                          {
+                            'widget': PromoBanner(
+                              bgColor: const Color(0xFF0D0907),
+                              shadowColor: const Color(0xFF8B4500),
+                              accentColor: const Color(0xFFD4860A),
+                              headlineColor: const Color(0xFFFFD580),
+                              imageUrl:
+                                  "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=900&q=95&fit=crop",
+                              chipLabel: "DESSERTS",
+                              headLine1: "Sweet",
+                              headLine2: "Indulgence",
+                              tagline: "Cakes, pastries & sweet treats",
+                              ctaLabel: "Explore Desserts",
+                              ctaTextColor: const Color(0xFF1A0800),
+                              painter: _DiagonalSlashPainter(),
+                            ),
+                            'category': 'Dessert',
+                          },
+                        ]
+                        .map(
+                          (item) => GestureDetector(
+                            onTap:
+                                () => Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder:
+                                        (_) => CategoryProductsView(
+                                          category: item['category'] as String,
+                                        ),
+                                  ),
+                                ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                              ),
+                              child: ClipRRect(
+                                borderRadius: const BorderRadius.all(
+                                  Radius.circular(25),
+                                ),
+                                child: item['widget'] as Widget,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+              ),
+            ),
+          ),
+        ),
+
+        /// SPACING
+        const SliverToBoxAdapter(child: SizedBox(height: 12)),
+
+        /// Categories
+        SliverToBoxAdapter(child: _buildCategoriesSection(context)),
+
+        const SliverToBoxAdapter(child: SizedBox(height: 20)),
+
+        /// Animated divider + section title combined
+        SliverToBoxAdapter(child: _PopularMealsDivider()),
+
+        /// Category Filter Chips
+        SliverToBoxAdapter(child: _buildCategoryFilterChips()),
+
+        /// Empty State / Popular Meals List
+        if (filtered.isEmpty)
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 40),
+              child: Center(
+                child: Text(
+                  'No items available',
+                  style: TextStyle(color: Color(0xFF94A3B8)),
+                ),
+              ),
+            ),
+          )
+        else
+          SliverList(
+            delegate: SliverChildBuilderDelegate((context, index) {
+              if (index.isOdd) return const DashedDivider();
+              final itemIndex = index ~/ 2;
+              return MenuItemCard(item: filtered[itemIndex], index: itemIndex);
+            }, childCount: filtered.length * 2 - 1),
+          ),
+        hasItems
+            ? const SliverToBoxAdapter(child: SizedBox(height: 170))
+            : const SliverToBoxAdapter(child: SizedBox(height: 140)),
+      ],
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // CATEGORY FILTER CHIPS
+  // ─────────────────────────────────────────────
+  Widget _buildCategoryFilterChips() {
+    final chips = [
+      {'label': 'All', 'asset': null, 'color': null},
+      {
+        'label': 'Main',
+        'asset': 'assets/main-food.png',
+        'color': const Color(0xFFE11D8F),
+      },
+      {
+        'label': 'Drink',
+        'asset': 'assets/drinks.png',
+        'color': const Color(0xFF6366F1),
+      },
+      {
+        'label': 'Snack',
+        'asset': 'assets/snacks.png',
+        'color': const Color(0xFFF97316),
+      },
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children:
+              chips.map((chip) {
+                final label = chip['label'] as String;
+                final asset = chip['asset'] as String?;
+                final chipColor = chip['color'] as Color?;
+                final isAll = label == 'All';
+                final isSelected =
+                    isAll
+                        ? _selectedCategory == null
+                        : _selectedCategory == label;
+
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedCategory = isAll ? null : label;
+                      });
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color:
+                            isSelected
+                                ? Theme.of(context).colorScheme.primary
+                                : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (asset != null)
+                            Image.asset(
+                              asset,
+                              width: 14,
+                              height: 14,
+                              color: isSelected ? Colors.white : chipColor,
+                            )
+                          else
+                            Icon(
+                              Icons.restaurant_menu_rounded,
+                              size: 14,
+                              color:
+                                  isSelected
+                                      ? Colors.white
+                                      : const Color(0xFF475569),
+                            ),
+                          const SizedBox(width: 6),
+                          Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color:
+                                  isSelected
+                                      ? Colors.white
+                                      : const Color(0xFF475569),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // CATEGORIES SECTION
+  // ─────────────────────────────────────────────
+  Widget _buildCategoriesSection(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 22),
+      child: Column(
+        children: [
+          // Header row
+          const Row(
+            children: [
+              Padding(
+                padding: EdgeInsets.only(top: 8.0),
+                child: Text(
+                  'Explore Categories',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0EA5E9),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Category items grid
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildCategoryItem(
+                  context,
+                  fit: BoxFit.fill,
+                  icon: LucideIcons.soup,
+                  label: 'Main',
+                  imagePath: 'assets/Main_category.png',
+                  color: const Color(0xFFF59E0B),
+                ),
+                const SizedBox(width: 15),
+                _buildCategoryItem(
+                  context,
+                  fit: BoxFit.fill,
+                  icon: Icons.coffee,
+                  imagePath: 'assets/drink_category.png',
+                  label: 'Drink',
+                  color: const Color(0xFFD97706),
+                ),
+                const SizedBox(width: 15),
+                _buildCategoryItem(
+                  context,
+                  icon: LucideIcons.croissant,
+                  imagePath: 'assets/Snack_category.png',
+                  label: 'Snack',
+                  color: const Color(0xFFEC4899),
+                ),
+                const SizedBox(width: 15),
+                _buildCategoryItem(
+                  context,
+                  icon: LucideIcons.coffee,
+                  label: 'Beverage',
+                  imagePath: 'assets/Beverage_category.png',
+                  color: const Color(0xFFB45309),
+                ),
+                const SizedBox(width: 15),
+                _buildCategoryItem(
+                  context,
+                  icon: LucideIcons.cake,
+                  imagePath: 'assets/Dessert_image.png',
+                  label: 'Dessert',
+                  color: const Color(0xFF0EA5E9),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryItem(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Color color,
+    required String imagePath,
+    BoxFit fit = BoxFit.cover,
+  }) {
+    return BouncingWidget(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => CategoryProductsView(category: label),
+          ),
+        );
+      },
+      child: Column(
+        children: [
+          Container(
+            width: 75,
+            height: 75,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                width: 2,
+              ),
+              image: DecorationImage(fit: fit, image: AssetImage(imagePath)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF475569),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // PROMOTIONAL BANNER
+
+  // ─────────────────────────────────────────────
+  // FEATURED TODAY SECTION (from API)
+  // ─────────────────────────────────────────────
+}
+
+class SearchBarDelegate extends SliverPersistentHeaderDelegate {
+  SearchBarDelegate();
+
+  @override
+  double get minExtent => 72;
+
+  @override
+  double get maxExtent => 72;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+      child: GestureDetector(
+        onTap:
+            () => Navigator.of(
+              context,
+              rootNavigator: true,
+            ).push(MaterialPageRoute(builder: (context) => SearchMealsView())),
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: const Row(
+            children: [
+              SizedBox(width: 14),
+              Icon(Icons.search_rounded, color: Color(0xFF0EA5E9), size: 20),
+              SizedBox(width: 10),
+              Text(
+                "Search meals...",
+                style: TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant SearchBarDelegate oldDelegate) {
+    return false;
+  }
+}
+
+class _PopularMealsDivider extends StatefulWidget {
+  @override
+  State<_PopularMealsDivider> createState() => _PopularMealsDividerState();
+}
+
+class _PopularMealsDividerState extends State<_PopularMealsDivider>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    )..repeat(reverse: true);
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 22),
+      child: Row(
+        children: [
+          // Left-aligned label
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Popular Meals',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                  color: Color(0xFF0EA5E9),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Image.asset('assets/food.gif', width: 22, height: 22),
+            ],
+          ),
+          const SizedBox(width: 12),
+
+          // Divider(color: Colors.black,height: 2,)
+          // Trailing divider
+          // Expanded(
+          //   child: AnimatedBuilder(
+          //     animation: _anim,
+          //     builder: (_, __) => Container(
+          //       height: 1,
+          //       decoration: BoxDecoration(
+          //         gradient: LinearGradient(
+          //           colors: [
+          //             Color.lerp(
+          //               const Color.fromARGB(255, 204, 225, 255),
+          //               const Color(0xFF1E293B),
+          //               _anim.value,
+          //             )!,
+          //             Colors.transparent,
+          //           ],
+          //         ),
+          //       ),
+          //     ),
+          //   ),
+          // ),
+        ],
+      ),
+    );
+  }
+}
+
+class DashedDivider extends StatelessWidget {
+  final double height;
+  final Color color;
+
+  const DashedDivider({
+    super.key,
+    this.height = 1,
+    this.color = const Color(0xFFCBD5E1),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const dashWidth = 4.0;
+        const dashSpace = 4.0;
+        final dashCount =
+            (constraints.maxWidth / (dashWidth + dashSpace)).floor();
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: List.generate(dashCount, (_) {
+            return SizedBox(
+              width: dashWidth,
+              height: height,
+              child: DecoratedBox(decoration: BoxDecoration(color: color)),
+            );
+          }),
+        );
+      },
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PROMO BANNER
+// ═══════════════════════════════════════════════════════════
+
+class PromoBanner extends StatelessWidget {
+  final Color bgColor;
+  final Color shadowColor;
+  final Color accentColor;
+  final Color headlineColor;
+  final Color ctaTextColor;
+  final String imageUrl;
+  final String chipLabel;
+  final String headLine1;
+  final String headLine2;
+  final String tagline;
+  final String ctaLabel;
+  final CustomPainter? painter;
+  final VoidCallback? onTap;
+
+  const PromoBanner({
+    super.key,
+    required this.bgColor,
+    required this.shadowColor,
+    required this.accentColor,
+    required this.headlineColor,
+    required this.imageUrl,
+    required this.chipLabel,
+    required this.headLine1,
+    required this.headLine2,
+    required this.tagline,
+    required this.ctaLabel,
+    this.ctaTextColor = Colors.white,
+    this.painter,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      child: InkWell(
+        onTap: onTap,
+        // behavior: HitTestBehavior.opaque,
+        child: Container(
+          height: 190,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+              BoxShadow(
+                color: shadowColor.withValues(alpha: 0.12),
+                blurRadius: 14,
+                spreadRadius: -2,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Background
+                Container(color: bgColor),
+
+                // Food image
+                Positioned(
+                  right: -10,
+                  top: 0,
+                  bottom: 0,
+                  width: 235,
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.centerLeft,
+                    loadingBuilder:
+                        (_, child, progress) =>
+                            progress == null ? child : const SizedBox.shrink(),
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                  ),
+                ),
+
+                // Grain overlay
+                Opacity(
+                  opacity: 0.07,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: Alignment.topRight,
+                        radius: 1.8,
+                        colors: [accentColor, Colors.transparent],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Left fade gradient
+                Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        bgColor,
+                        bgColor.withValues(alpha: 0.94),
+                        bgColor.withValues(alpha: 0.56),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.38, 0.62, 0.83],
+                    ),
+                  ),
+                ),
+
+                // Accent glow orb
+                Positioned(
+                  left: -50,
+                  bottom: -50,
+                  child: Container(
+                    width: 200,
+                    height: 200,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          accentColor.withValues(alpha: 0.20),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Optional decorative painter
+                if (painter != null) CustomPaint(painter: painter),
+
+                // Content
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(22, 0, 0, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 18),
+
+                      // Chip
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(width: 16, height: 1.5, color: accentColor),
+                          const SizedBox(width: 7),
+                          Text(
+                            chipLabel,
+                            style: TextStyle(
+                              color: accentColor,
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 2.2,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      // 👇 FLEXIBLE TEXT AREA (KEY FIX)
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            RichText(
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              text: TextSpan(
+                                style: const TextStyle(
+                                  fontSize: 26, // 👈 reduced
+                                  fontWeight: FontWeight.w900,
+                                  fontStyle: FontStyle.italic,
+                                  height: 1.05,
+                                  letterSpacing: -0.5,
+                                ),
+                                children: [
+                                  TextSpan(
+                                    text: '$headLine1\n',
+                                    style: const TextStyle(color: Colors.white),
+                                  ),
+                                  TextSpan(
+                                    text: headLine2,
+                                    style: TextStyle(color: headlineColor),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 4),
+
+                            Text(
+                              tagline,
+                              maxLines: 1, // 👈 prevent overflow
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.50),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      // CTA
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              accentColor.withValues(alpha: 0.85),
+                              accentColor,
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              ctaLabel,
+                              style: TextStyle(
+                                color: ctaTextColor,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12.5,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 14,
+                              color: ctaTextColor,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                ),
+                // Top gloss line
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: 1,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.white.withValues(alpha: 0.0),
+                          Colors.white.withValues(alpha: 0.14),
+                          Colors.white.withValues(alpha: 0.0),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  CUSTOM PAINTERS
+// ═══════════════════════════════════════════════════════════
+
+class _DiagonalSlashPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    void drawLine(
+      double xTopFrac,
+      double xBotFrac,
+      double opacity,
+      double width,
+    ) {
+      final paint =
+          Paint()
+            ..shader = LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                const Color(0xFFD4860A).withValues(alpha: 0.0),
+                const Color(0xFFD4860A).withValues(alpha: opacity),
+                const Color(0xFFD4860A).withValues(alpha: 0.0),
+              ],
+            ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
+            ..strokeWidth = width
+            ..style = PaintingStyle.stroke;
+      canvas.drawLine(
+        Offset(size.width * xTopFrac, 0),
+        Offset(size.width * xBotFrac, size.height),
+        paint,
+      );
+    }
+
+    drawLine(0.40, 0.30, 0.18, 1.2);
+    drawLine(0.44, 0.34, 0.09, 1.0);
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
+}
+
+class _StripePainter extends CustomPainter {
+  final Color color;
+  const _StripePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint =
+        Paint()
+          ..color = color.withValues(alpha: 0.10)
+          ..strokeWidth = 1.0
+          ..style = PaintingStyle.stroke;
+    for (int i = 0; i < 6; i++) {
+      final x = size.width * (0.34 + i * 0.028);
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x - size.height * 0.3, size.height),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
+}
+
+class _IcePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint =
+        Paint()
+          ..color = const Color(0xFF00CFFF).withValues(alpha: 0.10)
+          ..strokeWidth = 1.0
+          ..style = PaintingStyle.stroke;
+
+    // Hexagonal crystal lines
+    final cx = size.width * 0.38;
+    final cy = size.height * 0.25;
+    const r = 22.0;
+    for (int i = 0; i < 6; i++) {
+      final angle = math.pi / 3 * i;
+      final x = cx + r * math.cos(angle);
+      final y = cy + r * math.sin(angle);
+      canvas.drawLine(Offset(cx, cy), Offset(x, y), paint);
+    }
+    canvas.drawCircle(
+      Offset(cx, cy),
+      r,
+      paint..color = const Color(0xFF00CFFF).withValues(alpha: 0.06),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
+}
+
+class _ArcDotPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint =
+        Paint()
+          ..color = const Color(0xFFBB66FF).withValues(alpha: 0.18)
+          ..style = PaintingStyle.fill;
+
+    const cx = 30.0;
+    final cy = size.height * 0.5;
+    for (int i = 0; i < 5; i++) {
+      final angle = -math.pi / 4 + (math.pi / 2) / 4 * i;
+      const r = 55.0;
+      final x = cx + r * math.cos(angle);
+      final y = cy + r * math.sin(angle);
+      canvas.drawCircle(Offset(x, y), 2.5 - i * 0.3, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
+}

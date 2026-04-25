@@ -1,0 +1,700 @@
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:canteen_mangement/features/cart/presentation/controllers/cart_controller.dart';
+import 'package:canteen_mangement/features/menu/domain/entities/menu_item_entity.dart';
+import 'package:canteen_mangement/features/dashboard/presentation/controllers/dashboard_controller.dart';
+import 'package:canteen_mangement/core/utils/responsive.dart';
+import 'dart:ui';
+import 'package:canteen_mangement/core/theme/custom%20theme_tokens.dart';
+
+class MenuDetailView extends StatefulWidget {
+  final MenuItemEntity? item;
+  const MenuDetailView({super.key, this.item});
+
+  @override
+  State<MenuDetailView> createState() => _MenuDetailViewState();
+}
+
+class _MenuDetailViewState extends State<MenuDetailView>
+    with TickerProviderStateMixin {
+  final CartController _cartController = Get.find<CartController>();
+  late final MenuItemEntity item;
+
+  late AnimationController _fadeController;
+  late AnimationController _slideController;
+  late Animation<double> _fadeAnim;
+  late Animation<Offset> _slideAnim;
+  late Animation<double> _scaleAnim;
+
+  bool _descExpanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    item = widget.item ?? Get.arguments as MenuItemEntity;
+
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _slideController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+
+    _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, 0.12),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
+    );
+    _scaleAnim = Tween<double>(begin: 0.96, end: 1.0).animate(
+      CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
+    );
+
+    _fadeController.forward();
+    _slideController.forward();
+  }
+
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    _slideController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasImage = item.imageUrl != null && item.imageUrl!.isNotEmpty;
+
+    if (Responsive.isDesktop(context)) {
+      return _buildDesktopLayout(context, hasImage);
+    }
+    return _buildMobileLayout(context, hasImage);
+  }
+
+  Widget _buildDesktopLayout(BuildContext context, bool hasImage) {
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              color: Color(0xFF0EA5E9)),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text(item.name,
+            style: const TextStyle(
+                color: Color(0xFF1E293B),
+                fontSize: 18,
+                fontWeight: FontWeight.w700)),
+      ),
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Left: image
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: hasImage
+                    ? Image.network(item.imageUrl!,
+                        fit: BoxFit.cover,
+                        height: double.infinity,
+                        errorBuilder: (_, __, ___) =>
+                            _buildPlaceholderImage(context))
+                    : _buildPlaceholderImage(context),
+              ),
+            ),
+          ),
+          // Right: content
+          SizedBox(
+            width: 420,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(0, 32, 32, 32),
+              child: SlideTransition(
+                position: _slideAnim,
+                child: FadeTransition(
+                  opacity: _fadeAnim,
+                  child: _buildContent(context),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderImage(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          colors: [
+            cs.primary.withValues(alpha: 0.10),
+            cs.secondary.withValues(alpha: 0.20),
+          ],
+        ),
+      ),
+      child: const Center(
+        child: Text('🍽️', style: TextStyle(fontSize: 90)),
+      ),
+    );
+  }
+
+  Widget _buildMobileLayout(BuildContext context, bool hasImage) {
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeroImage(context, hasImage),
+            SlideTransition(
+              position: _slideAnim,
+              child: ScaleTransition(
+                scale: _scaleAnim,
+                child: FadeTransition(
+                  opacity: _fadeAnim,
+                  child: _buildContent(context),
+                ),
+              ),
+            ),
+            const SizedBox(height: 120),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // HERO IMAGE
+  // ─────────────────────────────────────────────
+  Widget _buildHeroImage(BuildContext context, bool hasImage) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Stack(
+      children: [
+        Hero(
+          tag: 'product_image_${item.id}',
+          child: Container(
+            width: double.infinity,
+            height: 380,
+            decoration: BoxDecoration(
+              color: cs.primary.withValues(alpha: 0.08),
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(40),
+                bottomRight: Radius.circular(40),
+              ),
+              image:
+                  hasImage
+                      ? DecorationImage(
+                        image: NetworkImage(item.imageUrl!),
+                        fit: BoxFit.cover,
+                      )
+                      : null,
+            ),
+            child:
+                !hasImage
+                    ? Stack(
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: const BorderRadius.only(
+                              bottomLeft: Radius.circular(40),
+                              bottomRight: Radius.circular(40),
+                            ),
+                            gradient: RadialGradient(
+                              center: Alignment.center,
+                              radius: 0.8,
+                              colors: [
+                                cs.primary.withValues(alpha: 0.10),
+                                cs.secondary.withValues(alpha: 0.20),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const Center(
+                          child: Text('🍽️', style: TextStyle(fontSize: 90)),
+                        ),
+                      ],
+                    )
+                    : null,
+          ),
+        ),
+
+        // Scrim
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 160,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(40),
+                bottomRight: Radius.circular(40),
+              ),
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  cs.onSurface.withValues(alpha: 0.50),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        // Price badge
+        Positioned(bottom: 24, right: 24, child: _buildPriceBadge(context)),
+
+        // Nav overlay
+        Positioned(
+          top: MediaQuery.of(context).padding.top + 10,
+          left: 20,
+          right: 20,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _buildCircleButton(
+                icon: Icons.arrow_back_ios_new_rounded,
+                onTap: () => Navigator.of(context).pop(),
+              ),
+              // Row(
+              //   children: [
+              //     _buildCircleButton(
+              //       icon: Icons.favorite_border_rounded,
+              //       onTap: () {},
+              //     ),
+              //     const SizedBox(width: 10),
+              //     _buildCircleButton(icon: Icons.share_rounded, onTap: () {}),
+              //   ],
+              // ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPriceBadge(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tokens = context.tokens;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      decoration: BoxDecoration(
+        color: cs.primary,
+        borderRadius: BorderRadius.circular(tokens.rFull),
+        boxShadow: tokens.buttonShadow,
+      ),
+      child: Text(
+        '₹${item.price.toStringAsFixed(0)}',
+        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+          color: cs.onPrimary,
+          fontSize: 20,
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCircleButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(50),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.85),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.6),
+                width: 1,
+              ),
+            ),
+            // Icon color resolves from Theme.of(context).iconTheme = primary
+            child: Icon(icon, size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // CONTENT SECTION
+  // ─────────────────────────────────────────────
+  Widget _buildContent(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final tokens = context.tokens;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Name
+          Text(
+            item.name,
+            style: textTheme.displaySmall?.copyWith(
+              fontSize: 30,
+              height: 1.2,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Meta chips
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (item.timeTaken != null)
+                _buildChip(
+                  context,
+                  icon: Icons.schedule_rounded,
+                  label: '${item.timeTaken} mins',
+                  bgColor: cs.primary.withValues(alpha: 0.10),
+                  textColor: cs.primary,
+                ),
+              _buildChip(
+                context,
+                icon: Icons.local_fire_department_rounded,
+                label: 'Popular',
+                bgColor: const Color(0xFFFFECEC),
+                textColor: const Color(0xFFD45C5C),
+              ),
+              _buildChip(
+                context,
+                icon: Icons.eco_rounded,
+                label: 'Fresh',
+                bgColor: const Color(0xFFE8F5E9),
+                textColor: const Color(0xFF4CAF50),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // ── Cart action (always visible — in scroll, not overlapped) ──
+          _buildCartAction(context),
+
+          const SizedBox(height: 30),
+
+          // About
+          _buildSectionDivider(context, 'ABOUT THIS DISH'),
+          const SizedBox(height: 14),
+          _buildDescription(context),
+          const SizedBox(height: 30),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // CART ACTION  (inline — scrolls with page, never covered)
+  // ─────────────────────────────────────────────
+  Widget _buildCartAction(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tokens = context.tokens;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Obx(() {
+      final cartQty = _cartController.getItemQuantity(item.id);
+      final isInCart = cartQty > 0;
+
+      return AnimatedSwitcher(
+        duration: const Duration(milliseconds: 320),
+        transitionBuilder:
+            (child, anim) => FadeTransition(
+              opacity: anim,
+              child: ScaleTransition(
+                scale: Tween(begin: 0.95, end: 1.0).animate(anim),
+                child: child,
+              ),
+            ),
+        child:
+            isInCart
+                // In cart: stepper + View Cart
+                ? Row(
+                  key: const ValueKey('in_cart'),
+                  children: [
+                    _buildQuantitySelector(context, cartQty),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap:
+                            () =>
+                                Get.find<DashboardController>().changeIndex(1),
+                        child: Container(
+                          height: 56,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: cs.primary, width: 2),
+                            borderRadius: BorderRadius.circular(tokens.rFull),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.shopping_bag_outlined,
+                                color: cs.primary,
+                                size: 20,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'VIEW CART',
+                                style: textTheme.titleSmall?.copyWith(
+                                  color: cs.primary,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+                // Not in cart: full-width Add to Cart
+                : GestureDetector(
+                  key: const ValueKey('add_to_cart'),
+                  onTap: () => _cartController.addItem(item.id, 1),
+                  child: Container(
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: cs.primary,
+                      borderRadius: BorderRadius.circular(tokens.rFull),
+                      boxShadow: tokens.buttonShadow,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.add_shopping_cart_rounded,
+                          color: cs.onPrimary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          'ADD TO CART',
+                          style: textTheme.titleSmall?.copyWith(
+                            color: cs.onPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+      );
+    });
+  }
+
+  Widget _buildQuantitySelector(BuildContext context, int cartQty) {
+    final tokens = context.tokens;
+    final cs = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Container(
+      height: 56,
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(tokens.rFull),
+        border: Border.all(color: tokens.borderLight, width: 1.5),
+        boxShadow: tokens.cardShadow,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildQtyButton(
+            context,
+            icon: Icons.remove_rounded,
+            onTap: () {
+              if (cartQty > 1) {
+                _cartController.updateItem(item.id, cartQty - 1);
+              } else {
+                _cartController.removeItem(item.id);
+              }
+            },
+          ),
+          SizedBox(
+            width: 46,
+            child: Center(
+              child: Text(
+                '$cartQty',
+                style: textTheme.titleLarge?.copyWith(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+          _buildQtyButton(
+            context,
+            icon: Icons.add_rounded,
+            onTap: () => _cartController.updateItem(item.id, cartQty + 1),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQtyButton(
+    BuildContext context, {
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+    final tokens = context.tokens;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 46,
+        height: 46,
+        margin: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: cs.primary,
+          shape: BoxShape.circle,
+          boxShadow: tokens.buttonShadow,
+        ),
+        child: Icon(icon, color: cs.onPrimary, size: 22),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  // HELPERS
+  // ─────────────────────────────────────────────
+  Widget _buildChip(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Color bgColor,
+    required Color textColor,
+  }) {
+    final tokens = context.tokens;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(tokens.rFull),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: textColor),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: textColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDescription(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final desc =
+        item.description ??
+        'A lovingly crafted dish prepared fresh each day with hand-selected ingredients. Every bite tells a story of quality, care, and culinary passion.';
+    final descStyle = textTheme.bodyMedium?.copyWith(height: 1.8);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          desc,
+          style: descStyle,
+          maxLines: _descExpanded ? null : 5,
+          overflow:
+              _descExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+        ),
+        // Only show toggle if text actually overflows 5 lines
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final tp = TextPainter(
+              text: TextSpan(text: desc, style: descStyle),
+              maxLines: 4,
+              textDirection: TextDirection.ltr,
+            )..layout(maxWidth: constraints.maxWidth);
+
+            final overflows = tp.didExceedMaxLines;
+            if (!overflows) return const SizedBox.shrink();
+
+            return GestureDetector(
+              onTap: () => setState(() => _descExpanded = !_descExpanded),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  _descExpanded ? 'Read less ▲' : 'Read more ▼',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: cs.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSectionDivider(BuildContext context, String label) {
+    final tokens = context.tokens;
+
+    return Row(
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2.0,
+            color: tokens.mutedText,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Container(
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  tokens.borderLight,
+                  tokens.borderLight.withValues(alpha: 0),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
