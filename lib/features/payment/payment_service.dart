@@ -9,7 +9,7 @@ class PaymentService {
   // Android emulator uses 10.0.2.2 to reach host localhost.
   // For a physical device, replace with your machine's local IP (e.g. http://192.168.1.x:4242/api).
   // For production, replace with your deployed URL.
-  static const String _backendUrl = 'http://10.0.2.2:4242/api';
+  static const String _backendUrl = 'https://qless-d1u4.onrender.com/api';
 
   /// Creates a PaymentIntent on your backend and returns the clientSecret.
   Future<String> createPaymentIntent({
