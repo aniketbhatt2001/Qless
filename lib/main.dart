@@ -11,7 +11,6 @@ import 'package:canteen_mangement/features/auth/presentation/views/splash_view.d
 import 'package:canteen_mangement/features/dashboard/presentation/bindings/dashboard_binding.dart';
 import 'package:canteen_mangement/features/payment/payment_binding.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter_stripe/flutter_stripe.dart';
 
 import 'package:canteen_mangement/features/cart/presentation/views/cart_view.dart';
 import 'package:canteen_mangement/features/dashboard/presentation/views/dashboard_view_original_backup.dart';
@@ -27,8 +26,6 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await dotenv.load(fileName: '.env');
-  Stripe.publishableKey = dotenv.env['STRIPE_PUBLISHABLE_KEY']!;
-  await Stripe.instance.applySettings();
 
   final prefs = await SharedPreferences.getInstance();
   final localDataSource = AuthLocalDataSourceImpl(prefs);
@@ -71,7 +68,10 @@ class MyApp extends StatelessWidget {
             page: () => const DashboardView(),
             binding: DashboardBinding(),
           ),
-          GetPage(name: AppRoutes.menuDetail, page: () => const MenuDetailView()),
+          GetPage(
+            name: AppRoutes.menuDetail,
+            page: () => const MenuDetailView(),
+          ),
           GetPage(name: AppRoutes.cart, page: () => CartView()),
           GetPage(name: AppRoutes.orders, page: () => const OrderListView()),
           GetPage(name: AppRoutes.profile, page: () => ProfileView()),

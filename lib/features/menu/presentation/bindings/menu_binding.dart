@@ -13,15 +13,17 @@ class MenuBinding extends Bindings {
   void dependencies() {
     Get.lazyPut<MenuRemoteDataSource>(
       () => MenuRemoteDataSourceImpl(Get.find<DioClient>().dio),
+      fenix: true,
     );
 
     Get.lazyPut<MenuRepository>(
       () => MenuRepositoryImpl(Get.find<MenuRemoteDataSource>()),
+      fenix: true,
     );
 
-    Get.lazyPut(() => GetMenuItemsUseCase(Get.find<MenuRepository>()));
-    Get.lazyPut(() => GetMenuByCategoryUseCase(Get.find<MenuRepository>()));
-    Get.lazyPut(() => GetMenuItemUseCase(Get.find<MenuRepository>()));
+    Get.lazyPut(() => GetMenuItemsUseCase(Get.find<MenuRepository>()), fenix: true);
+    Get.lazyPut(() => GetMenuByCategoryUseCase(Get.find<MenuRepository>()), fenix: true);
+    Get.lazyPut(() => GetMenuItemUseCase(Get.find<MenuRepository>()), fenix: true);
 
     Get.lazyPut(
       () => MenuController(getMenuItemsUseCase: Get.find()),

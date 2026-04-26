@@ -64,11 +64,11 @@ class _PaymentMethodSheet extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // Stripe card option
+          // Razorpay option
           _PaymentOption(
             icon: LucideIcons.creditCard,
             label: 'Credit / Debit Card',
-            subtitle: 'Powered by Stripe',
+            subtitle: 'Powered by Razorpay',
             color: primary,
             onTap: () async {
               Navigator.pop(context, true);

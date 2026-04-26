@@ -1,3 +1,4 @@
+import 'package:canteen_mangement/features/auth/presentation/controllers/auth_controller.dart';
 import 'package:canteen_mangement/features/cart/presentation/controllers/cart_controller.dart';
 import 'package:canteen_mangement/features/dashboard/presentation/controllers/dashboard_controller.dart';
 import 'package:canteen_mangement/features/order/presentation/controllers/order_controller.dart';
@@ -37,8 +38,14 @@ class CartView extends StatelessWidget {
     if (result == null) return; // cancelled
 
     if (result == true) {
-      // Stripe payment
-      final paid = await _paymentController.processPayment(totalAmount: total);
+      // Razorpay payment
+      final user = Get.find<AuthController>().user.value;
+      final paid = await _paymentController.processPayment(
+        totalAmount: total,
+        userEmail: 'user@quickerq.app',
+        userPhone: user?.phone ?? '',
+        userName: user?.name ?? '',
+      );
       if (!paid) return;
     }
     // result == false → Cash on delivery, skip payment
@@ -475,7 +482,7 @@ class _CartItemTile extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      "\₹${item.menuItem.price.toStringAsFixed(2)}",
+                      "₹${item.menuItem.price.toStringAsFixed(2)}",
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.primary,
                         fontSize: 16,
