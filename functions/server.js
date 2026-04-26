@@ -1,35 +1,40 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const Razorpay = require('razorpay');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
+
 // Health check
 app.get('/', (req, res) => res.json({ status: 'QuickerQ payment server running' }));
 
-// Create PaymentIntent
-// POST /api/payments/create-intent
+// Create Razorpay Order
+// POST /api/payments/create-order
 // Body: { amount: number (in paise), currency: string }
-app.post('/api/payments/create-intent', async (req, res) => {
+app.post('/api/payments/create-order', async (req, res) => {
   try {
-    const { amount, currency = 'inr' } = req.body;
+    const { amount, currency = 'INR' } = req.body;
 
-    if (!amount || typeof amount !== 'number' || amount < 50) {
-      return res.status(400).json({ error: 'Invalid amount. Must be a number >= 50 (paise).' });
+    if (!amount || typeof amount !== 'number' || amount < 100) {
+      return res.status(400).json({ error: 'Invalid amount. Must be a number >= 100 (paise).' });
     }
 
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount,      // already in paise from Flutter
+    const order = await razorpay.orders.create({
+      amount,       // in paise
       currency,
-      payment_method_types: ['card'],
+      receipt: `receipt_${Date.now()}`,
     });
 
-    res.status(201).json({ clientSecret: paymentIntent.client_secret });
+    res.status(201).json({ id: order.id, amount: order.amount, currency: order.currency });
   } catch (err) {
-    console.error('Stripe error:', err.message);
+    console.error('Razorpay error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
