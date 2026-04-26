@@ -28,6 +28,12 @@ class DioClient {
           log(options.baseUrl);
           log(options.path);
 
+          // Skip token check for public auth endpoints
+          const publicPaths = [ApiEndpoints.login, ApiEndpoints.register];
+          if (publicPaths.contains(options.path)) {
+            return handler.next(options);
+          }
+
           final valid = await isTokenValid();
           if (!valid) {
             onUnauthorized?.call();
