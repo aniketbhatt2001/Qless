@@ -24,7 +24,7 @@ app.post('/api/payments/create-intent', async (req, res) => {
     const paymentIntent = await stripe.paymentIntents.create({
       amount,      // already in paise from Flutter
       currency,
-      automatic_payment_methods: { enabled: true },
+      payment_method_types: ['card'],
     });
 
     res.status(201).json({ clientSecret: paymentIntent.client_secret });
