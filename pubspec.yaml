@@ -28,6 +28,8 @@ dependencies:
   flutter_secure_storage: ^9.0.0
   # Logging: Proper logging instead of print statements
   logger: ^2.0.2+1
+  flutter_stripe: ^11.4.0
+  http: ^1.2.1
 
   
   

@@ -1,6 +1,8 @@
 import 'package:canteen_mangement/features/cart/presentation/controllers/cart_controller.dart';
 import 'package:canteen_mangement/features/dashboard/presentation/controllers/dashboard_controller.dart';
 import 'package:canteen_mangement/features/order/presentation/controllers/order_controller.dart';
+import 'package:canteen_mangement/features/payment/payment_controller.dart';
+import 'package:canteen_mangement/features/payment/widgets/payment_method_sheet.dart';
 import 'package:canteen_mangement/core/utils/responsive.dart';
 import 'package:canteen_mangement/features/cart/presentation/views/order_success_animation.dart';
 import 'package:flutter/material.dart';
@@ -14,8 +16,38 @@ import 'package:flutter_animate/flutter_animate.dart';
 class CartView extends StatelessWidget {
   final CartController _cartController = Get.find<CartController>();
   final OrderController _orderController = Get.find<OrderController>();
+  final PaymentController _paymentController = Get.find<PaymentController>();
 
   CartView({super.key});
+
+  Future<void> _handleCheckout(BuildContext context) async {
+    final cart = _cartController.cart.value;
+    if (cart == null || cart.items.isEmpty) return;
+
+    final total = cart.items.fold(
+      0.0,
+      (sum, e) => sum + e.menuItem.price * e.quantity,
+    );
+
+    final result = await showPaymentMethodSheet(
+      context: context,
+      totalAmount: total,
+    );
+
+    if (result == null) return; // cancelled
+
+    if (result == true) {
+      // Stripe payment
+      final paid = await _paymentController.processPayment(totalAmount: total);
+      if (!paid) return;
+    }
+    // result == false → Cash on delivery, skip payment
+
+    final success = await _orderController.placeOrderFromCart();
+    if (success) {
+      Get.to(() => const OrderSuccessAnimation());
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -169,13 +201,7 @@ class CartView extends StatelessWidget {
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(15)),
                   ),
-                  onPressed: () async {
-                    bool success =
-                        await _orderController.placeOrderFromCart();
-                    if (success) {
-                      Get.to(() => const OrderSuccessAnimation());
-                    }
-                  },
+                  onPressed: () => _handleCheckout(context),
                   child: const Text('Place Order',
                       style: TextStyle(
                           color: Colors.white,
@@ -225,7 +251,7 @@ class CartView extends StatelessWidget {
                 },
               ),
             ),
-            _buildOrderSummary(),
+            _buildOrderSummary(context),
           ],
         ),
       ],
@@ -303,57 +329,59 @@ class CartView extends StatelessWidget {
     );
   }
 
-  Widget _buildOrderSummary() {
-    return Builder(
-      builder: (context) {
-        final primary = Theme.of(context).colorScheme.primary;
-        return Container(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-          ),
-          child: SafeArea(
-            top: false,
-            minimum: const EdgeInsets.only(bottom: 72),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Expanded(
-                  child: Text(
-                    "₹ ${_cartController.cart.value!.items.fold(0.0, (previousValue, element) => previousValue + (element.menuItem.price * element.quantity))}",
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: primary),
-                  ),
-                ),
-                Expanded(
-                  child: SizedBox(
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                      ),
-                      onPressed: () async {
-                        bool success = await _orderController.placeOrderFromCart();
-                        if (success) {
-                          Get.to(() => const OrderSuccessAnimation());
-                        }
-                      },
-                      child: const Text(
-                        "Place Order",
-                        style: TextStyle(color: Colors.white, fontSize: 16),
-                      ),
+  Widget _buildOrderSummary(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+      ),
+      child: SafeArea(
+        top: false,
+        minimum: const EdgeInsets.only(bottom: 72),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Expanded(
+              child: Text(
+                "₹ ${_cartController.cart.value!.items.fold(0.0, (previousValue, element) => previousValue + (element.menuItem.price * element.quantity))}",
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: primary),
+              ),
+            ),
+            Expanded(
+              child: Obx(() => SizedBox(
+                height: 50,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
                     ),
                   ),
+                  onPressed: _paymentController.status.value == PaymentStatus.processing
+                      ? null
+                      : () => _handleCheckout(context),
+                  child: _paymentController.status.value == PaymentStatus.processing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          "Place Order",
+                          style: TextStyle(color: Colors.white, fontSize: 16),
+                        ),
                 ),
-              ],
+              )),
             ),
-          ),
-        ).animate().fade().slideY(begin: 0.2);
-      },
-    );
+          ],
+        ),
+      ),
+    ).animate().fade().slideY(begin: 0.2);
   }
 }
 

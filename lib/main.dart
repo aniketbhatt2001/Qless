@@ -9,6 +9,8 @@ import 'package:canteen_mangement/features/auth/presentation/views/login_view.da
 import 'package:canteen_mangement/features/auth/presentation/views/register_view.dart';
 import 'package:canteen_mangement/features/auth/presentation/views/splash_view.dart';
 import 'package:canteen_mangement/features/dashboard/presentation/bindings/dashboard_binding.dart';
+import 'package:canteen_mangement/features/payment/payment_binding.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 
 import 'package:canteen_mangement/features/cart/presentation/views/cart_view.dart';
 import 'package:canteen_mangement/features/dashboard/presentation/views/dashboard_view_original_backup.dart';
@@ -23,6 +25,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // TODO: Replace with your actual Stripe publishable key
+  Stripe.publishableKey = 'pk_test_YOUR_PUBLISHABLE_KEY_HERE';
+  await Stripe.instance.applySettings();
+
   final prefs = await SharedPreferences.getInstance();
   final localDataSource = AuthLocalDataSourceImpl(prefs);
   Get.put<AuthLocalDataSource>(localDataSource, permanent: true);
@@ -34,6 +40,7 @@ void main() async {
   Get.put<DioClient>(dioClient, permanent: true);
 
   AuthBinding().dependencies();
+  PaymentBinding().dependencies();
 
   dioClient.onUnauthorized = () {
     Get.find<AuthController>().logout();
