@@ -11,7 +11,6 @@ import 'package:canteen_mangement/features/auth/presentation/views/splash_view.d
 import 'package:canteen_mangement/features/dashboard/presentation/bindings/dashboard_binding.dart';
 import 'package:canteen_mangement/features/payment/payment_binding.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-
 import 'package:canteen_mangement/features/cart/presentation/views/cart_view.dart';
 import 'package:canteen_mangement/features/dashboard/presentation/views/dashboard_view_original_backup.dart';
 import 'package:canteen_mangement/features/menu/presentation/views/menu_detail_view.dart';

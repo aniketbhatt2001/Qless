@@ -16,6 +16,10 @@ import UIKit
     open url: URL,
     options: [UIApplication.OpenURLOptionsKey: Any] = [:]
   ) -> Bool {
+    print("🔗 AppDelegate received URL: \(url.absoluteString)")
+    print("🔗 URL scheme: \(url.scheme ?? "none")")
+    print("🔗 URL host: \(url.host ?? "none")")
+    print("🔗 URL query: \(url.query ?? "none")")
     return super.application(app, open: url, options: options)
   }
 }

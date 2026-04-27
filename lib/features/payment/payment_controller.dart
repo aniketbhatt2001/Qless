@@ -90,8 +90,8 @@ class PaymentController extends GetxController {
         'description': 'Food Order',
         'prefill': {'contact': userPhone, 'email': userEmail, 'name': userName},
         'theme': {'color': '#6366F1'},
-        'callback_url': 'quickerq://razorpay',
-        'redirect': true,
+        // 'callback_url': 'quickerq://razorpay',
+        // 'redirect': true,
       };
 
       _completer = Completer<bool>();
